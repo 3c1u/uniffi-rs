@@ -2,17 +2,26 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+use crate::MergeWith;
 use anyhow::Result;
 use askama::Template;
 use heck::{CamelCase, MixedCase, ShoutySnakeCase};
+use serde::{Deserialize, Serialize};
 
 use crate::interface::*;
 
 // Some config options for it the caller wants to customize the generated C#.
 // Note that this can only be used to control details of the C# *that do not affect the underlying component*,
 // sine the details of the underlying component are entirely determined by the `ComponentInterface`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     // No config options yet.
+}
+
+impl From<&ComponentInterface> for Config {
+    fn from(_ci: &ComponentInterface) -> Self {
+        Config {}
+    }
 }
 
 impl Config {
@@ -20,6 +29,12 @@ impl Config {
         Config {
             // No config options yet
         }
+    }
+}
+
+impl MergeWith for Config {
+    fn merge_with(&self, _other: &Self) -> Self {
+        Config {}
     }
 }
 

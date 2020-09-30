@@ -17,6 +17,7 @@ use super::super::interface::ComponentInterface;
 
 /// Generates C# bindings for the given ComponentInterface, in the given output directory.
 pub fn write_bindings(
+    config: &Config,
     ci: &ComponentInterface,
     out_dir: &Path,
     _try_format_code: bool,
@@ -24,7 +25,7 @@ pub fn write_bindings(
     let mut cs_file = PathBuf::from(out_dir);
     cs_file.push(format!("{}.cs", ci.namespace()));
     let mut f = File::create(&cs_file).context("Failed to create .py file for bindings")?;
-    write!(f, "{}", generate_csharp_bindings(&ci)?)?;
+    write!(f, "{}", generate_csharp_bindings(config, &ci)?)?;
 
     // TODO: format code
 
@@ -32,10 +33,9 @@ pub fn write_bindings(
 }
 
 /// Genrates C# bindings
-pub fn generate_csharp_bindings(ci: &ComponentInterface) -> Result<String> {
-    let config = Config::from(&ci);
+pub fn generate_csharp_bindings(config: &Config, ci: &ComponentInterface) -> Result<String> {
     use askama::Template;
-    CSharpWrapper::new(&config, &ci)
+    CSharpWrapper::new(config, &ci)
         .render()
         .map_err(|_| anyhow::anyhow!("failed to render C# bindings"))
 }

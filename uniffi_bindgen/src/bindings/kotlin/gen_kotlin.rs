@@ -5,20 +5,45 @@
 use anyhow::Result;
 use askama::Template;
 use heck::{CamelCase, MixedCase, ShoutySnakeCase};
+use serde::{Deserialize, Serialize};
 
 use crate::interface::*;
+use crate::MergeWith;
 
 // Some config options for it the caller wants to customize the generated Kotlin.
 // Note that this can only be used to control details of the Kotlin *that do not affect the underlying component*,
 // sine the details of the underlying component are entirely determined by the `ComponentInterface`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub package_name: String,
+    package_name: Option<String>,
 }
 
 impl Config {
-    pub fn from(ci: &ComponentInterface) -> Self {
+    fn default_package_name() -> String {
+        "uniffi".into()
+    }
+
+    pub fn package_name(&self) -> String {
+        if let Some(package_name) = &self.package_name {
+            package_name.clone()
+        } else {
+            Config::default_package_name()
+        }
+    }
+}
+
+impl From<&ComponentInterface> for Config {
+    fn from(ci: &ComponentInterface) -> Self {
         Config {
-            package_name: format!("uniffi.{}", ci.namespace()),
+            package_name: Some(format!("uniffi.{}", ci.namespace())),
+        }
+    }
+}
+
+impl MergeWith for Config {
+    fn merge_with(&self, other: &Self) -> Self {
+        Config {
+            package_name: self.package_name.merge_with(&other.package_name),
         }
     }
 }
@@ -81,6 +106,49 @@ mod filters {
             FFIType::RustBuffer => "RustBuffer.ByValue".to_string(),
             FFIType::RustError => "RustError".to_string(),
             FFIType::ForeignBytes => "ForeignBytes.ByValue".to_string(),
+        })
+    }
+
+    pub fn literal_kt(literal: &Literal) -> Result<String, askama::Error> {
+        fn typed_number(type_: &Type, num_str: String) -> Result<String, askama::Error> {
+            Ok(match type_ {
+                // Bytes, Shorts and Ints can all be inferred from the type.
+                Type::Int8 | Type::Int16 | Type::Int32 => num_str,
+                Type::Int64 => format!("{}L", num_str),
+
+                Type::UInt8 | Type::UInt16 | Type::UInt32 => format!("{}u", num_str),
+                Type::UInt64 => format!("{}uL", num_str),
+
+                Type::Float32 => format!("{}f", num_str),
+                Type::Float64 => num_str,
+                _ => panic!("Unexpected literal: {} is not a number", num_str),
+            })
+        }
+
+        Ok(match literal {
+            Literal::Boolean(v) => format!("{}", v),
+            Literal::String(s) => format!("\"{}\"", s),
+            Literal::Null => "null".into(),
+            Literal::EmptySequence => "listOf()".into(),
+            Literal::EmptyMap => "mapOf".into(),
+            Literal::Enum(v, type_) => format!("{}.{}", type_kt(type_)?, enum_variant_kt(v)?),
+            Literal::Int(i, radix, type_) => typed_number(
+                type_,
+                match radix {
+                    Radix::Octal => format!("{:#x}", i),
+                    Radix::Decimal => format!("{}", i),
+                    Radix::Hexadecimal => format!("{:#x}", i),
+                },
+            )?,
+            Literal::UInt(i, radix, type_) => typed_number(
+                type_,
+                match radix {
+                    Radix::Octal => format!("{:#x}", i),
+                    Radix::Decimal => format!("{}", i),
+                    Radix::Hexadecimal => format!("{:#x}", i),
+                },
+            )?,
+            Literal::Float(string, type_) => typed_number(type_, string.clone())?,
         })
     }
 

@@ -8,10 +8,12 @@
 //! along with some helpers for executing foreign language scripts or tests.
 
 use anyhow::{bail, Result};
+use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
 use crate::interface::ComponentInterface;
+use crate::MergeWith;
 
 pub mod csharp;
 pub mod kotlin;
@@ -62,8 +64,43 @@ impl TryFrom<String> for TargetLanguage {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(default)]
+    kotlin: kotlin::Config,
+    #[serde(default)]
+    swift: swift::Config,
+    #[serde(default)]
+    python: python::Config,
+    #[serde(default)]
+    csharp: csharp::Config,
+}
+
+impl From<&ComponentInterface> for Config {
+    fn from(ci: &ComponentInterface) -> Self {
+        Config {
+            kotlin: ci.into(),
+            swift: ci.into(),
+            python: ci.into(),
+            csharp: ci.into(),
+        }
+    }
+}
+
+impl MergeWith for Config {
+    fn merge_with(&self, other: &Self) -> Self {
+        Config {
+            kotlin: self.kotlin.merge_with(&other.kotlin),
+            swift: self.swift.merge_with(&other.swift),
+            python: self.python.merge_with(&other.python),
+            csharp: self.csharp.merge_with(&other.csharp),
+        }
+    }
+}
+
 /// Generate foreign language bindings from a compiled `uniffi` library.
 pub fn write_bindings<P>(
+    config: &Config,
     ci: &ComponentInterface,
     out_dir: P,
     language: TargetLanguage,
@@ -74,16 +111,25 @@ where
 {
     let out_dir = out_dir.as_ref();
     match language {
-        TargetLanguage::Kotlin => kotlin::write_bindings(&ci, out_dir, try_format_code)?,
-        TargetLanguage::Swift => swift::write_bindings(&ci, out_dir, try_format_code)?,
-        TargetLanguage::Python => python::write_bindings(&ci, out_dir, try_format_code)?,
-        TargetLanguage::CSharp => csharp::write_bindings(&ci, out_dir, try_format_code)?,
+        TargetLanguage::Kotlin => {
+            kotlin::write_bindings(&config.kotlin, &ci, out_dir, try_format_code)?
+        }
+        TargetLanguage::Swift => {
+            swift::write_bindings(&config.swift, &ci, out_dir, try_format_code)?
+        }
+        TargetLanguage::Python => {
+            python::write_bindings(&config.python, &ci, out_dir, try_format_code)?
+        }
+        TargetLanguage::CSharp => {
+            csharp::write_bindings(&config.csharp, &ci, out_dir, try_format_code)?
+        }
     }
     Ok(())
 }
 
 /// Compile generated foreign language bindings so they're ready for use.
 pub fn compile_bindings<P>(
+    config: &Config,
     ci: &ComponentInterface,
     out_dir: P,
     language: TargetLanguage,
@@ -93,8 +139,8 @@ where
 {
     let out_dir = out_dir.as_ref();
     match language {
-        TargetLanguage::Kotlin => kotlin::compile_bindings(&ci, out_dir)?,
-        TargetLanguage::Swift => swift::compile_bindings(&ci, out_dir)?,
+        TargetLanguage::Kotlin => kotlin::compile_bindings(&config.kotlin, &ci, out_dir)?,
+        TargetLanguage::Swift => swift::compile_bindings(&config.swift, &ci, out_dir)?,
         TargetLanguage::CSharp => (),
         TargetLanguage::Python => (),
     }
